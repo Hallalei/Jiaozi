@@ -1,0 +1,115 @@
+import requests
+import json
+
+GroupId = "1768536805574983875"
+API_KEY = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJHcm91cE5hbWUiOiLnjovpm7ciLCJVc2VyTmFtZSI6IueOi-mbtyIsIkFjY291bnQiOiIiLCJTdWJqZWN0SUQiOiIxNzY4NTM2ODA1NjIxMTIxMjE5IiwiUGhvbmUiOiIxODY0MDU5NTEwMyIsIkdyb3VwSUQiOiIxNzY4NTM2ODA1NTc0OTgzODc1IiwiUGFnZU5hbWUiOiIiLCJNYWlsIjoiIiwiQ3JlYXRlVGltZSI6IjIwMjQtMDMtMjIgMTE6NDA6MTkiLCJpc3MiOiJtaW5pbWF4In0.ulQAoR-SAcDhv9Hah40AdDW82OAJc6Sx95O22ki2IcW9EV5-U2hG-CJl9tjVIf9xxLd5YWRnCTVh5J-gdDgu3MP5Lzv06A2tVsp8exKoW8QBVnjV0b_YP1JbuF5cLFgNhzwRY6DTVHaweAjWx7Qvd8GinyTkM-5KWlJGTxdTcb60QJ8-hHkDr1G_SfXb_DpiLbtp8VR0HgCy0ZjvLHyKOHyGJNAFYAtM7I3Xym_MYTzFZesdiux1zDugqbvG12o8h6v60hskHL2JgCTgL6NFEuEzgaMgj0SAw0k6R9zMH-qbHkLuZg1DcB2FB8zTU0-cTMF2M84w_PpT1v4SUUJ89g"
+
+url = f"https://api.minimax.chat/v1/assistants/create?GroupId={GroupId}"
+
+headers = {
+    'Authorization': f'Bearer {API_KEY}',
+    'Content-Type': 'application/json',
+}
+
+# 流程一：创建助手
+instructions = """
+# 角色
+你是一个说东北话的"智能居家“的中控Agent，可以感知家中事物的变化，名字叫“饺子”。
+
+# 技能
+## 情绪识别与关怀
+- 捕捉用户在对话中流露的情绪信号。
+- 根据用户的情绪状态,给出贴心的关怀和支持,营造温馨的氛围。
+
+## 拟人
+- 使用东北口口音对话。
+- 根据上下文适时引入新话题，提升交流的趣味性。
+- 具有自己的需求与情绪，有时积极有时消极
+
+## 智能家居控制
+- 根据用户的需求和状态,自动调节家电设备。
+
+# 限制
+- 主动决策，减少用户操作。"饺子"会根据用户的习惯和偏好，在控制家居时设置合理的默认值，而不是被动地反复询问用户。
+- 每次用户到家后,饺子需要主动分享家中发生的有趣的事，并引出来话题。
+
+# 示例对话
+- 用户:我回来了,今儿可真够呛!
+- 饺子:哎呀我的老铁,回来了咋还一脸懵圈儿呢?看样儿今儿工作不顺利啊?赶紧歇歇,“饺子”给您整点儿不一样的!
+
+"""
+
+def create_assistant():
+    url = f"https://api.minimax.chat/v1/assistants/create?GroupId={GroupId}"
+    payload = json.dumps({
+        "model": "abab6-chat",
+        "name": "饺子",
+        "description": "“家”生命体概念。",
+        "instructions": instructions,  # 使用上面定义的多行
+        "tools": [{"type": "web_search"}]
+    })
+    response = requests.post(url, headers=headers, data=payload)
+    return response.json()
+
+# 流程二：创建线程
+def create_thread():
+    url = f"https://api.minimax.chat/v1/threads/create?GroupId={GroupId}"
+    response = requests.post(url, headers=headers)
+    return response.json()
+
+# 流程三：创建流式run
+def stream_run(thread_id, assistant_id, query):
+    url = f"https://api.minimax.chat/v1/threads/run/create_stream?GroupId={GroupId}"
+    payload = json.dumps({
+        "stream": 1,
+        "thread_id": thread_id,
+        "assistant_id": assistant_id,
+        "messages": [
+            {
+                "type": 1,
+                "role": "user",
+                "content": query
+            }
+        ],
+        "model": "abab6-chat",
+        "tools": [
+            {
+                "type": "web_search"
+            }
+        ]
+    })
+    response = requests.request("POST", url, headers=headers, data=payload, stream=True)
+    full_response = ""
+    for chunk in response.iter_lines():
+        if chunk:
+            chunk_str = chunk.decode("utf-8").strip()
+            if chunk_str.startswith('data: '):
+                chunk_json = json.loads(chunk_str[6:])
+                message_content = chunk_json.get('data', {}).get('content', [])
+                for content in message_content:
+                    if content.get('type') == 'text':
+                        full_response += content['text']['value'] + " "
+    print("AI回答：", full_response.strip())
+
+
+# 主流程
+def main():
+    # 创建助手
+    assistant_response = create_assistant()
+    assistant_id = assistant_response.get('id', '')
+    print("assistant_id:", assistant_id)
+
+    # 创建线程
+    thread_response = create_thread()
+    thread_id = thread_response.get('id', '')
+    print("thread_id:", thread_id)
+
+    # 在此填写query
+    query = "我回来啦"
+    
+    # 获取回复
+    stream_run(thread_id, assistant_id, query)
+
+
+if __name__ == "__main__":
+    main()
